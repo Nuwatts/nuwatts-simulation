@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nuwatts Thermal Transport Simulation</title>
+  <style>
+    :root {
+      --bg: #050816;
+      --panel: #0c1228;
+      --line: rgba(255,255,255,0.14);
+      --text: #eef4ff;
+      --muted: #9bb0d6;
+      --hot: #ff5a36;
+      --warm: #ffb347;
+      --cool: #55c7ff;
+      --cool2: #79ffd6;
+      --accent: #ffd86b;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      height: 100%;
+      background:
+        radial-gradient(circle at 20% 20%, rgba(66, 94, 255, 0.14), transparent 24%),
+        radial-gradient(circle at 80% 18%, rgba(255, 120, 60, 0.10), transparent 22%),
+        radial-gradient(circle at 50% 80%, rgba(86, 214, 255, 0.08), transparent 30%),
+        linear-gradient(180deg, #02040d 0%, #050816 55%, #070d1d 100%);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    .stars,
+    .stars2 {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-repeat: repeat;
+      opacity: 0.7;
+    }
+
+    .stars {
+      background-image: radial-gradient(circle, rgba(255,255,255,0.95) 0 1px, transparent 1.2px);
+      background-size: 140px 140px;
+      animation: drift 60s linear infinite;
+    }
+
+    .stars2 {
+      background-image: radial-gradient(circle, rgba(140,190,255,0.7) 0 1px, transparent 1.2px);
+      background-size: 220px 220px;
+      animation: drift 100s linear infinite reverse;
+      opacity: 0.35;
+    }
+
+    @keyframes drift {
+      from { transform: translate3d(0, 0, 0); }
+      to { transform: translate3d(-160px, 90px, 0); }
+    }
+
+    .frame {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+    }
+
+    .hud {
+      position: absolute;
+      left: 50%;
+      bottom: 28px;
+      transform: translateX(-50%);
+      z-index: 5;
+      max-width: 760px;
+      width: calc(100% - 220px);
+      text-align: center;
+      padding: 14px 18px;
+      background: rgba(8, 14, 28, 0.58);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+
+    .brand {
+      font-size: 13px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .headline {
+      font-size: clamp(30px, 5vw, 56px);
+      line-height: 1;
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      margin: 0 0 10px 0;
+      text-shadow: 0 0 24px rgba(255,255,255,0.08);
+    }
+
+    .subline {
+      font-size: clamp(14px, 1.8vw, 20px);
+      color: var(--muted);
+      line-height: 1.45;
+      min-height: 3em;
+      margin: 0 auto;
+    }
+
+    .controls {
+      position: absolute;
+      right: 24px;
+      bottom: 22px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 14px;
+      background: rgba(8, 14, 28, 0.7);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      backdrop-filter: blur(10px);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.35);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    button {
+      border: 1px solid rgba(255,255,255,0.18);
+      background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.03));
+      color: var(--text);
+      padding: 9px 14px;
+      border-radius: 10px;
+      cursor: pointer;
+      font: inherit;
+      transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease;
+    }
+
+    button:hover {
+      transform: translateY(-1px);
+      border-color: rgba(255,255,255,0.28);
+      background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0.05));
+    }
+
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      white-space: nowrap;
+    }
+
+    svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .glass {
+      fill: rgba(14, 22, 42, 0.58);
+      stroke: rgba(255,255,255,0.12);
+      stroke-width: 1.5;
+      filter: url(#softShadow);
+    }
+
+    .pipe {
+      fill: none;
+      stroke: rgba(150, 200, 255, 0.25);
+      stroke-width: 18;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .pipeCore {
+      fill: none;
+      stroke: rgba(150, 220, 255, 0.18);
+      stroke-width: 8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .flow {
+      fill: none;
+      stroke: url(#flowGradient);
+      stroke-width: 10;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      filter: url(#flowGlow);
+      stroke-dasharray: 30 40;
+      animation: flowDash 1.3s linear infinite;
+      opacity: 0;
+    }
+
+    .flow.active { opacity: 1; }
+
+    @keyframes flowDash {
+      from { stroke-dashoffset: 0; }
+      to { stroke-dashoffset: -140; }
+    }
+
+    .heatPulse {
+      filter: url(#hotGlow);
+      opacity: 0.9;
+      transform-origin: center;
+      animation: pulseHeat 2.8s ease-in-out infinite;
+    }
+
+    @keyframes pulseHeat {
+      0%, 100% { transform: scale(1); opacity: 0.68; }
+      50% { transform: scale(1.06); opacity: 1; }
+    }
+
+    .weakArrow {
+      opacity: 0;
+      transition: opacity 0.5s ease;
+    }
+
+    .weakArrow.visible { opacity: 0.7; }
+
+    .moduleShell {
+      fill: url(#moduleFill);
+      stroke: rgba(255,255,255,0.12);
+      stroke-width: 1.5;
+      filter: url(#softShadow);
+    }
+
+    .radiator {
+      fill: url(#radiatorFill);
+      stroke: rgba(255,255,255,0.13);
+      stroke-width: 1.2;
+      filter: url(#softShadow);
+    }
+
+    .radiatorGlow {
+      opacity: 0;
+      filter: url(#coolGlow);
+      transition: opacity 0.8s ease;
+    }
+
+    .radiatorGlow.active { opacity: 0.95; }
+
+    .sourceHeat {
+      transition: opacity 1s ease, transform 1s ease, fill 1s ease;
+      transform-origin: center;
+    }
+
+    .sourceHeat.cooling {
+      opacity: 0.38;
+      transform: scale(0.88);
+    }
+
+    .sourceCore {
+      transition: fill 1s ease, opacity 1s ease;
+    }
+
+    .sourceCore.cooling {
+      fill: rgba(96, 210, 255, 0.8);
+      opacity: 0.9;
+    }
+
+    .label {
+      fill: rgba(237, 244, 255, 0.94);
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+    }
+
+    .minor {
+      fill: rgba(155,176,214,0.95);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .appGroup {
+      opacity: 0;
+      transform-box: fill-box;
+      transform-origin: center;
+      transition: opacity 0.9s ease, transform 0.9s ease;
+    }
+
+    .appGroup.visible {
+      opacity: 1;
+      transform: scale(1);
+    }
+
+    .appGroup.hiddenStart {
+      transform: scale(0.9);
+    }
+
+    .fade {
+      opacity: 0;
+      transition: opacity 0.9s ease;
+    }
+
+    .fade.visible { opacity: 1; }
+
+    .finalLockup {
+      opacity: 0;
+      transition: opacity 1s ease;
+    }
+
+    .finalLockup.visible { opacity: 1; }
+
+    .glowText {
+      filter: url(#textGlow);
+    }
+
+    .recordHint {
+      position: absolute;
+      right: 24px;
+      top: 24px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(0,0,0,0.28);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: var(--muted);
+      font-size: 12px;
+      z-index: 10;
+      backdrop-filter: blur(8px);
+    }
+
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #ff4c4c;
+      margin-right: 8px;
+      box-shadow: 0 0 10px rgba(255, 76, 76, 0.8);
+      animation: blink 1.2s ease-in-out infinite;
+      vertical-align: middle;
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stars"></div>
+  <div class="stars2"></div>
+
+  <div class="frame">
+    <div class="hud">
+      <div class="brand">Nuwatts Simulation</div>
+      <h1 id="headline" class="headline">Heat is generated</h1>
+      <div id="subline" class="subline">High-power systems create concentrated thermal loads that must be managed.</div>
+    </div>
+
+    <div class="recordHint"><span class="dot"></span>Use screen recording for export</div>
+
+    <svg viewBox="0 0 1600 900" aria-label="Nuwatts thermal transport simulation">
+      <defs>
+        <linearGradient id="moduleFill" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="rgba(35,55,98,0.75)"></stop>
+          <stop offset="100%" stop-color="rgba(9,16,36,0.96)"></stop>
+        </linearGradient>
+
+        <linearGradient id="radiatorFill" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="rgba(35, 50, 78, 0.95)"></stop>
+          <stop offset="100%" stop-color="rgba(11, 19, 36, 0.98)"></stop>
+        </linearGradient>
+
+        <linearGradient id="flowGradient" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0%" stop-color="#ff6a3d"></stop>
+          <stop offset="50%" stop-color="#ffd96d"></stop>
+          <stop offset="100%" stop-color="#5dd6ff"></stop>
+        </linearGradient>
+
+        <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+          <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="rgba(0,0,0,0.42)"></feDropShadow>
+        </filter>
+
+        <filter id="hotGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="20" result="blur"></feGaussianBlur>
+          <feMerge>
+            <feMergeNode in="blur"></feMergeNode>
+            <feMergeNode in="SourceGraphic"></feMergeNode>
+          </feMerge>
+        </filter>
+
+        <filter id="coolGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="18" result="blur"></feGaussianBlur>
+          <feMerge>
+            <feMergeNode in="blur"></feMergeNode>
+            <feMergeNode in="SourceGraphic"></feMergeNode>
+          </feMerge>
+        </filter>
+
+        <filter id="flowGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="7" result="blur"></feGaussianBlur>
+          <feMerge>
+            <feMergeNode in="blur"></feMergeNode>
+            <feMergeNode in="SourceGraphic"></feMergeNode>
+          </feMerge>
+        </filter>
+
+        <filter id="textGlow" x="-30%" y="-30%" width="160%" height="160%">
+          <feGaussianBlur stdDeviation="5" result="blur"></feGaussianBlur>
+          <feMerge>
+            <feMergeNode in="blur"></feMergeNode>
+            <feMergeNode in="SourceGraphic"></feMergeNode>
+          </feMerge>
+        </filter>
+      </defs>
+
+      <g id="mainScene">
+        <rect class="moduleShell" x="260" y="280" rx="28" ry="28" width="360" height="240"></rect>
+        <rect x="300" y="320" rx="18" ry="18" width="280" height="160" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.06)"></rect>
+        <circle id="heatAura" class="sourceHeat heatPulse" cx="440" cy="400" r="108" fill="rgba(255, 96, 54, 0.48)"></circle>
+        <circle id="heatCore" class="sourceCore" cx="440" cy="400" r="72" fill="rgba(255, 115, 56, 0.95)" filter="url(#hotGlow)"></circle>
+        <text class="label" x="440" y="570" text-anchor="middle">Heat Source</text>
+        <text class="minor" x="440" y="592" text-anchor="middle">Compute / Payload / Power Electronics</text>
+      </g>
+
+      <g id="weakArrows" class="weakArrow">
+        <path d="M585 350 C660 330, 710 320, 755 335" fill="none" stroke="rgba(255, 170, 100, 0.7)" stroke-width="3" stroke-dasharray="8 10"></path>
+        <path d="M585 400 C675 396, 742 394, 800 400" fill="none" stroke="rgba(255, 170, 100, 0.7)" stroke-width="3" stroke-dasharray="8 10"></path>
+        <path d="M585 450 C666 470, 718 480, 760 470" fill="none" stroke="rgba(255, 170, 100, 0.7)" stroke-width="3" stroke-dasharray="8 10"></path>
+        <polygon points="757,332 773,335 760,346" fill="rgba(255, 170, 100, 0.8)"></polygon>
+        <polygon points="802,398 820,400 804,411" fill="rgba(255, 170, 100, 0.8)"></polygon>
+        <polygon points="760,467 776,470 763,481" fill="rgba(255, 170, 100, 0.8)"></polygon>
+      </g>
+
+      <g id="loopGroup" class="fade">
+        <path id="loopPath" class="pipe" d="M680 400 C680 275, 840 210, 1000 210 L1180 210 C1265 210, 1320 265, 1320 350 L1320 490 C1320 575, 1265 630, 1180 630 L1000 630 C840 630, 680 525, 680 400"></path>
+        <path class="pipeCore" d="M680 400 C680 275, 840 210, 1000 210 L1180 210 C1265 210, 1320 265, 1320 350 L1320 490 C1320 575, 1265 630, 1180 630 L1000 630 C840 630, 680 525, 680 400"></path>
+        <path id="flowPath" class="flow" d="M680 400 C680 275, 840 210, 1000 210 L1180 210 C1265 210, 1320 265, 1320 350 L1320 490 C1320 575, 1265 630, 1180 630 L1000 630 C840 630, 680 525, 680 400"></path>
+      </g>
+
+      <g id="radiatorGroup" class="fade">
+        <g transform="translate(1140 308)">
+          <rect class="radiator" x="0" y="0" rx="16" ry="16" width="150" height="225"></rect>
+          <rect x="18" y="16" width="114" height="193" rx="12" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.08)"></rect>
+          <g stroke="rgba(150, 220, 255, 0.25)" stroke-width="2">
+            <line x1="32" y1="20" x2="32" y2="205"></line>
+            <line x1="50" y1="20" x2="50" y2="205"></line>
+            <line x1="68" y1="20" x2="68" y2="205"></line>
+            <line x1="86" y1="20" x2="86" y2="205"></line>
+            <line x1="104" y1="20" x2="104" y2="205"></line>
+          </g>
+          <ellipse id="radiatorGlow" class="radiatorGlow" cx="75" cy="112" rx="96" ry="138" fill="rgba(90, 215, 255, 0.45)"></ellipse>
+          <text class="label" x="75" y="252" text-anchor="middle">Radiator</text>
+          <text class="minor" x="75" y="272" text-anchor="middle">Heat Rejection</text>
+        </g>
+      </g>
+
+      
+
+        <g class="appGroup hiddenStart" id="app2" transform="translate(930 610)">
+          <rect class="glass" x="0" y="0" width="250" height="120" rx="24"></rect>
+          <circle cx="70" cy="58" r="26" fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.12)"></circle>
+          <path d="M70 32 L70 84 M44 58 L96 58" stroke="rgba(255,255,255,0.14)"></path>
+          <path d="M112 38 L170 58 L112 78 Z" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)"></path>
+          <path d="M170 58 L212 40 L212 76 Z" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.12)"></path>
+          <path d="M118 96 C150 82, 182 82, 214 96" fill="none" stroke="rgba(255, 195, 90, 0.65)" stroke-width="4"></path>
+          <text class="label" x="125" y="108" text-anchor="middle">Satellites</text>
+        </g>
+      </g>
+
+      <!-- NEW scrolling banner -->
+      <g id="scrollBanner">
+        <text id="scrollText" x="1600" y="80" text-anchor="start" style="font-size:28px; fill:#eef4ff; letter-spacing:0.15em;">
+          LUNAR SYSTEMS, SATELLITES, DATA CENTERS IN SPACE
+        </text>
+      </g>
+
+      <g id="bigLockup" class="finalLockup">
+        <text class="glowText" x="800" y="448" text-anchor="middle" style="font-size:86px;font-weight:800;letter-spacing:-0.05em;fill:#eef4ff;">We move heat.</text>
+        <text x="800" y="492" text-anchor="middle" style="font-size:22px;fill:#9bb0d6;letter-spacing:0.12em;text-transform:uppercase;">Nuwatts</text>
+      </g>
+    </svg>
+
+    <div class="controls">
+      <button id="playBtn">Play</button>
+      <button id="restartBtn">Restart</button>
+      <div class="pill">Duration: 45s</div>
+      <div class="pill">GitHub Pages ready</div>
+    </div>
+  </div>
+
+  <script>
+    const headline = document.getElementById('headline');
+    const subline = document.getElementById('subline');
+    const weakArrows = document.getElementById('weakArrows');
+    const loopGroup = document.getElementById('loopGroup');
+    const flowPath = document.getElementById('flowPath');
+    const radiatorGroup = document.getElementById('radiatorGroup');
+    const radiatorGlow = document.getElementById('radiatorGlow');
+    const heatAura = document.getElementById('heatAura');
+    const heatCore = document.getElementById('heatCore');
+    const finalLockup = document.getElementById('bigLockup');
+    
+    const playBtn = document.getElementById('playBtn');
+    const restartBtn = document.getElementById('restartBtn');
+
+    let timers = [];
+    let running = false;
+
+    const sceneText = {
+      s1: ['Heat is generated', 'High-power systems create concentrated thermal loads that must be managed.'],
+      s2: ['Heat gets trapped', 'Without an efficient transport layer, thermal energy pools where it is produced.'],
+      s3: ['Introduce Nuwatts', 'A closed-loop architecture creates a pathway for thermal relocation.'],
+      s4: ['Flow begins', 'Thermally driven circulation starts moving energy through the loop.'],
+      s5: ['Heat is transported', 'Thermal energy is pulled away from the source and carried to a sink.'],
+      s6: ['Heat reaches the radiator', 'Heat is delivered to where it can be rejected or repurposed.'],
+      s7: ['Stable thermal control', 'The source cools while circulation continues in a controlled loop.'],
+      s8: ['From Earth to space', 'The same heat transport principle can extend across multiple system types.'],
+      s9: ['We move heat.', 'Nuwatts is building a new way to transport thermal energy.']
+    };
+
+    function setText(key) {
+      const [h, s] = sceneText[key];
+      headline.textContent = h;
+      subline.textContent = s;
+    }
+
+    function schedule(ms, fn) {
+      const id = setTimeout(fn, ms);
+      timers.push(id);
+    }
+
+    function clearAllTimers() {
+      timers.forEach(clearTimeout);
+      timers = [];
+    }
+
+    function resetState() {
+      clearAllTimers();
+      running = false;
+      playBtn.textContent = 'Play';
+
+      setText('s1');
+      weakArrows.classList.remove('visible');
+      loopGroup.classList.remove('visible');
+      radiatorGroup.classList.remove('visible');
+      flowPath.classList.remove('active');
+      radiatorGlow.classList.remove('active');
+      heatAura.classList.remove('cooling');
+      heatCore.classList.remove('cooling');
+      finalLockup.classList.remove('visible');
+      
+    }
+
+    function startScrollingText() {
+      const el = document.getElementById('scrollText');
+      let pos = 1600;
+      function step() {
+        pos -= 1.5;
+        el.setAttribute('x', pos);
+        if (pos > -1000) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    }
+
+    function playSequence() {
+      if (running) return;
+      resetState();
+      running = true;
+      playBtn.textContent = 'Playing…';
+
+      setText('s1');
+
+      schedule(4000, () => {
+        setText('s2');
+        weakArrows.classList.add('visible');
+      });
+
+      schedule(8000, () => {
+        setText('s3');
+        loopGroup.classList.add('visible');
+        radiatorGroup.classList.add('visible');
+      });
+
+      schedule(12000, () => {
+        setText('s4');
+        flowPath.classList.add('active');
+      });
+
+      schedule(18000, () => {
+        setText('s5');
+        weakArrows.classList.remove('visible');
+      });
+
+      schedule(24000, () => {
+        setText('s6');
+        radiatorGlow.classList.add('active');
+      });
+
+      schedule(30000, () => {
+        setText('s7');
+        heatAura.classList.add('cooling');
+        heatCore.classList.add('cooling');
+      });
+
+      schedule(36000, () => {
+        setText('s8');
+        startScrollingText();
+      });
+
+      schedule(42000, () => {
+        setText('s9');
+        finalLockup.classList.add('visible');
+      });
+
+      schedule(45000, () => {
+        running = false;
+        playBtn.textContent = 'Play Again';
+      });
+    }
+
+    playBtn.addEventListener('click', () => {
+      if (!running) playSequence();
+    });
+
+    restartBtn.addEventListener('click', () => {
+      resetState();
+    });
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (!running) playSequence();
+      }
+      if (e.key.toLowerCase() === 'r') {
+        resetState();
+      }
+    });
+
+    resetState();
+  </script>
+</body>
+</html>
